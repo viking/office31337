@@ -1,0 +1,47 @@
+#!/usr/bin/env python
+
+import argparse
+import keyring
+from office31337 import Fetcher, FetchType
+
+parser = argparse.ArgumentParser(description = "Fetch e-mails from Office 365 inbox into a local mailbox.")
+parser.add_argument('username', type = str, nargs = 1, help = "Account e-mail address")
+parser.add_argument('mailbox', type = str, nargs = 1, help = "Local mailbox path")
+parser.add_argument('--password', type = str, nargs = 1, help = "Password for account (optional, uses keyring otherwise)")
+parser.add_argument('--limit', type = int, nargs = 1, help = "Maximum number of e-mails to fetch")
+parser.add_argument('--verbose', action = "store_true", help = "Print lots of messages")
+parser.add_argument('--pretend', action = "store_true", help = "Don't write files or mark messages as read")
+parser.add_argument('--no-mark', action = "store_true", help = "Don't mark messages as read")
+parser.add_argument('--all', action = "store_true", help = "Fetch all e-mails instead of only unread e-mails")
+args = parser.parse_args()
+
+username = args.username[0]
+
+if args.password is None:
+    password = keyring.get_password("exchange", username)
+    if password is None:
+        print("Unable to fetch password from keyring! Use --password option.")
+        exit(1)
+else:
+    password = args.password[0]
+    # TODO: save in keyring
+
+destination = args.mailbox[0]
+fetcher = Fetcher(username, password, destination)
+
+if args.all:
+    which = FetchType.ALL
+else:
+    which = FetchType.UNREAD
+
+if args.limit is not None:
+    limit = args.limit[0]
+else:
+    limit = None
+
+if args.no_mark:
+    mark_read = False
+else:
+    mark_read = True
+
+fetcher.fetch(which, limit, args.verbose, mark_read, args.pretend)
