@@ -110,6 +110,6 @@ class Fetcher:
             if not pretend:
                 self.mh.add(MHMessage(email))
 
-                if mark_read:
+                if mark_read and item.is_read:
                     item.is_read = True
                     item.save()
