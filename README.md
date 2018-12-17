@@ -1,11 +1,11 @@
 office31337
 -----------
 
-office31337 is a Python 3 package for fetching e-mail from Office 365 and storing
-it in a local mailbox (MH format). It is designed to simulate POP3 for those
-whose companies use Office 365 for e-mail and have disabled IMAP and POP3 for
-vague 'security' reasons. MH format can be consumed by various e-mail clients,
-notably [Claws Mail](https://www.claws-mail.org/).
+office31337 is a Python 3 package for fetching e-mail from Office 365 and
+storing it in a local mailbox (MH or mbox formats). It is designed to simulate
+POP3 for those whose companies use Office 365 for e-mail and have disabled IMAP
+and POP3 for vague 'security' reasons. MH and mbox formats can be consumed by
+various e-mail clients, notably [Claws Mail](https://www.claws-mail.org/).
 
 ### Installation
 
@@ -37,9 +37,9 @@ only have to do this once.
 Below is a full list of command line arguments accepted by office31337:
 
 ```
-office31337 [-h] [--password PASSWORD] [--limit LIMIT] [--verbose]
-                 [--pretend] [--no-mark] [--all]
-                 username mailbox
+usage: office31337 [-h] [--password PASSWORD] [--limit LIMIT] [--verbose]
+                   [--pretend] [--no-mark] [--all] [--mbox] [--no-dupes]
+                   username mailbox
 
 Fetch e-mails from Office 365 inbox into a local mailbox.
 
@@ -55,4 +55,14 @@ optional arguments:
   --pretend            Don't write files or mark messages as read
   --no-mark            Don't mark messages as read
   --all                Fetch all e-mails instead of only unread e-mails
+  --mbox               Use mbox format instead of MH
+  --no-dupes           Make sure no duplicate e-mails are stored
 ```
+
+### Notes
+
+Python currently has a bug (likely related to
+https://bugs.python.org/issue34424) that makes processing e-mail headers with
+unicode characters impossible. To work around this, office31337 transliterates
+unicode characters in headers via the
+[Unidecode](https://pypi.org/project/Unidecode/) package.
