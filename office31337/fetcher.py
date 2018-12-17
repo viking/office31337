@@ -52,7 +52,14 @@ class Fetcher:
                 if name.lower() == 'content-type':
                     continue
 
-                value = sanitize_header_value(header.value)
+                # parse the header using the e-mail's policy class, since
+                # sometimes unicode characters get created.
+                # i.e. '=?UTF-8?Q?Fakult=c3=a4t_Statistik=2c_Technische_Universit?= =?UTF-8?Q?=c3=a4t_Dortmund?='
+                value = email.policy.header_factory(name, header.value)
+
+                # remove unicode characters to workaround python bug
+                value = sanitize_header_value(value)
+
                 email.add_header(name, value)
 
             if item.author is not None:
