@@ -5,30 +5,6 @@ from unidecode import unidecode
 from enum import Enum, auto
 from sys import stdout
 
-# python 3.6 seems to choke on unicode characters in headers sometimes
-def sanitize_header_value(value):
-    return unidecode(value)
-
-def format_mailbox(mb):
-    return sanitize_header_value('"%s" <%s>' % (mb.name, mb.email_address))
-
-def format_mailbox_list(mb_list):
-    return ', '.join(map(format_mailbox, mb_list))
-
-def add_attachments(email, attachments, inline):
-    for attachment in attachments:
-        if isinstance(attachment, FileAttachment):
-            maintype, subtype = attachment.content_type.split('/')
-            with attachment.fp as fp:
-                data = fp.read()
-                if inline:
-                    email.add_related(data, maintype = maintype, subtype = subtype,
-                                      cid = attachment.content_id)
-                else:
-                    email.add_attachment(data, maintype = maintype, subtype = subtype)
-        elif isinstance(attachment, ItemAttachment):
-            print(attachment)
-
 class FetchType(Enum):
     UNREAD = auto()
     ALL = auto()
@@ -119,27 +95,27 @@ class Fetcher:
                 value = email.policy.header_factory(name, header.value)
 
                 # remove unicode characters to workaround python bug
-                value = sanitize_header_value(value)
+                value = self._sanitize_header_value(value)
 
                 email.add_header(name, value)
 
             if item.author is not None:
-                email['From'] = format_mailbox(item.author)
+                email['From'] = self._format_mailbox(item.author)
 
             if item.sender is not None:
-                email['Sender'] = format_mailbox(item.sender)
+                email['Sender'] = self._format_mailbox(item.sender)
 
             if item.reply_to is not None:
-                email['Reply-To'] = format_mailbox(item.reply_to)
+                email['Reply-To'] = self._format_mailbox(item.reply_to)
 
             if item.to_recipients is not None:
-                email['To'] = format_mailbox_list(item.to_recipients)
+                email['To'] = self._format_mailbox_list(item.to_recipients)
 
             if item.cc_recipients is not None:
-                email['Cc'] = format_mailbox_list(item.cc_recipients)
+                email['Cc'] = self._format_mailbox_list(item.cc_recipients)
 
             if item.bcc_recipients is not None:
-                email['Bcc'] = format_mailbox_list(item.bcc_recipients)
+                email['Bcc'] = self._format_mailbox_list(item.bcc_recipients)
 
             # separate inline attachments
             inline_attachments = []
@@ -163,10 +139,10 @@ class Fetcher:
                     email.add_alternative(str(item.body), subtype = 'html')
 
             # add any inline attachments first
-            add_attachments(email, inline_attachments, True)
+            self._add_attachments(email, inline_attachments, True)
 
             # add any non-inline attachments (will convert to multipart/mixed)
-            add_attachments(email, attachments, False)
+            self._add_attachments(email, attachments, False)
 
             if not pretend:
                 self.mailbox.lock()
@@ -179,3 +155,26 @@ class Fetcher:
 
                 if check_dupes and email['Message-ID'] is not None:
                     message_ids.append(email['Message-ID'])
+
+    def _sanitize_header_value(self, value):
+        return unidecode(value)
+
+    def _format_mailbox(self, mb):
+        return self._sanitize_header_value('"%s" <%s>' % (mb.name, mb.email_address))
+
+    def _format_mailbox_list(self, mb_list):
+        return ', '.join(map(self._format_mailbox, mb_list))
+
+    def _add_attachments(self, email, attachments, inline):
+        for attachment in attachments:
+            if isinstance(attachment, FileAttachment):
+                maintype, subtype = attachment.content_type.split('/')
+                with attachment.fp as fp:
+                    data = fp.read()
+                    if inline:
+                        email.add_related(data, maintype = maintype, subtype = subtype,
+                                          cid = attachment.content_id)
+                    else:
+                        email.add_attachment(data, maintype = maintype, subtype = subtype)
+            elif isinstance(attachment, ItemAttachment):
+                print(attachment)
