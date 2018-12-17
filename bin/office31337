@@ -2,7 +2,7 @@
 
 import argparse
 import keyring
-from office31337 import Fetcher, FetchType
+from office31337 import Fetcher, FetchType, MailboxType
 
 parser = argparse.ArgumentParser(description = "Fetch e-mails from Office 365 inbox into a local mailbox.")
 parser.add_argument('username', type = str, nargs = 1, help = "Account e-mail address")
@@ -13,6 +13,8 @@ parser.add_argument('--verbose', action = "store_true", help = "Print lots of me
 parser.add_argument('--pretend', action = "store_true", help = "Don't write files or mark messages as read")
 parser.add_argument('--no-mark', action = "store_true", help = "Don't mark messages as read")
 parser.add_argument('--all', action = "store_true", help = "Fetch all e-mails instead of only unread e-mails")
+parser.add_argument('--mbox', action = "store_true", help = "Use mbox format instead of MH")
+parser.add_argument('--no-dupes', action = "store_true", help = "Make sure no duplicate e-mails are stored")
 args = parser.parse_args()
 
 username = args.username[0]
@@ -29,8 +31,12 @@ else:
     except:
         print("Tried to store credentials in local keyring, but failed.")
 
-destination = args.mailbox[0]
-fetcher = Fetcher(username, password, destination)
+mailbox_path = args.mailbox[0]
+mailbox_type = MailboxType.MH
+if args.mbox:
+    mailbox_type = MailboxType.MBOX
+
+fetcher = Fetcher(username, password, mailbox_path, mailbox_type, args.verbose)
 
 if args.all:
     which = FetchType.ALL
@@ -47,4 +53,4 @@ if args.no_mark:
 else:
     mark_read = True
 
-fetcher.fetch(which, limit, args.verbose, mark_read, args.pretend)
+fetcher.fetch(which, limit, mark_read, args.pretend, args.no_dupes)

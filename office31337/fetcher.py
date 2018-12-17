@@ -1,8 +1,9 @@
-from exchangelib import Credentials, Account, Configuration, DELEGATE
-from mailbox import MH, MHMessage
+from exchangelib import Credentials, Account, Configuration, Message, FileAttachment, ItemAttachment, DELEGATE
+from mailbox import MH, mbox
 from email.message import EmailMessage
 from unidecode import unidecode
 from enum import Enum, auto
+from sys import stdout
 
 # python 3.6 seems to choke on unicode characters in headers sometimes
 def sanitize_header_value(value):
@@ -14,20 +15,68 @@ def format_mailbox(mb):
 def format_mailbox_list(mb_list):
     return ', '.join(map(format_mailbox, mb_list))
 
+def add_attachments(email, attachments, inline):
+    for attachment in attachments:
+        if isinstance(attachment, FileAttachment):
+            maintype, subtype = attachment.content_type.split('/')
+            with attachment.fp as fp:
+                data = fp.read()
+                if inline:
+                    email.add_related(data, maintype = maintype, subtype = subtype,
+                                      cid = attachment.content_id)
+                else:
+                    email.add_attachment(data, maintype = maintype, subtype = subtype)
+        elif isinstance(attachment, ItemAttachment):
+            print(attachment)
+
 class FetchType(Enum):
     UNREAD = auto()
     ALL = auto()
 
+class MailboxType(Enum):
+    MH = auto()
+    MBOX = auto()
+
 class Fetcher:
-    def __init__(self, username, password, destination):
+    def __init__(self, username, password, mailbox_path, mailbox_type = MailboxType.MH, verbose = False):
+        self.verbose = verbose
+        if verbose:
+            stdout.write("Logging in...")
+            stdout.flush()
+
         credentials = Credentials(username, password)
         config = Configuration(server = 'outlook.office365.com',
                 credentials = credentials)
         self.account = Account(primary_smtp_address = username,
                 config = config, autodiscover = False, access_type = DELEGATE)
-        self.mh = MH(destination)
 
-    def fetch(self, which = FetchType.UNREAD, limit = None, verbose = False, mark_read = True, pretend = False):
+        if verbose:
+            print("done.")
+
+        self.mailbox_type = mailbox_type
+        if mailbox_type == MailboxType.MH:
+            self.mailbox = MH(mailbox_path)
+        elif mailbox_type == MailboxType.MBOX:
+            self.mailbox = mbox(mailbox_path)
+        else:
+            raise RuntimeError("invalid mailbox type")
+
+    def fetch(self, which = FetchType.UNREAD, limit = None, mark_read = True, pretend = False, check_dupes = False):
+        message_ids = []
+        if check_dupes:
+            if self.verbose:
+                stdout.write("Collecting message IDs for duplication checks...")
+                stdout.flush()
+
+            message_ids = []
+            for (i, m) in self.mailbox.items():
+                m_id = m['Message-ID']
+                if m_id is not None:
+                    message_ids.append(m_id)
+
+            if self.verbose:
+                print("done.")
+
         it = self.account.inbox.all().order_by('-datetime_received')
         if which == FetchType.UNREAD:
             it = it.filter('IsRead:false')
@@ -40,10 +89,22 @@ class Fetcher:
                 it = it[:limit]
 
         for index, item in enumerate(it):
-            if verbose:
-                print(f"Fetching message {index+1} of {count}: {item.message_id}")
+            if check_dupes and item.message_id is not None and item.message_id in message_ids:
+                if self.verbose:
+                    print(f"Skipping message {index+1} of {count}: {item.subject} ({item.message_id})")
+                continue
+
+            if self.verbose:
+                print(f"Processing message {index+1} of {count}: {item.subject} ({item.message_id})")
 
             email = EmailMessage()
+
+            # process headers
+            if item.headers is None:
+                if self.verbose:
+                    print("> No headers! Skipping.")
+                continue
+
             for header in item.headers:
                 name = header.name
 
@@ -91,32 +152,30 @@ class Fetcher:
                         attachments.append(attachment)
 
             if len(inline_attachments) > 0:
-                email.add_related(item.text_body, subtype = 'plain')
+                if item.text_body is not None:
+                    email.add_related(item.text_body, subtype = 'plain')
                 if item.body.body_type == 'HTML':
                     email.add_related(str(item.body), subtype = 'html')
             else:
-                email.set_content(item.text_body, subtype = 'plain')
+                if item.text_body is not None:
+                    email.set_content(item.text_body, subtype = 'plain')
                 if item.body.body_type == 'HTML':
                     email.add_alternative(str(item.body), subtype = 'html')
 
             # add any inline attachments first
-            for attachment in inline_attachments:
-                maintype, subtype = attachment.content_type.split('/')
-                with attachment.fp as fp:
-                    data = fp.read()
-                    email.add_related(data, maintype = maintype, subtype = subtype,
-                                      cid = attachment.content_id)
+            add_attachments(email, inline_attachments, True)
 
             # add any non-inline attachments (will convert to multipart/mixed)
-            for attachment in attachments:
-                maintype, subtype = attachment.content_type.split('/')
-                with attachment.fp as fp:
-                    data = fp.read()
-                    email.add_attachment(data, maintype = maintype, subtype = subtype)
+            add_attachments(email, attachments, False)
 
             if not pretend:
-                self.mh.add(MHMessage(email))
+                self.mailbox.lock()
+                self.mailbox.add(email)
+                self.mailbox.unlock()
 
                 if mark_read and not item.is_read:
                     item.is_read = True
                     item.save()
+
+                if check_dupes and email['Message-ID'] is not None:
+                    message_ids.append(email['Message-ID'])

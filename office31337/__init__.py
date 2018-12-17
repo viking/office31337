@@ -1,1 +1,1 @@
-from .fetcher import Fetcher, FetchType
+from .fetcher import Fetcher, FetchType, MailboxType
