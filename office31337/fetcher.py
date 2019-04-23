@@ -151,7 +151,7 @@ class Fetcher:
 
                 if mark_read and not item.is_read:
                     item.is_read = True
-                    item.save()
+                    item.save(update_fields=['is_read'])
 
                 if check_dupes and email['Message-ID'] is not None:
                     message_ids.append(email['Message-ID'])
