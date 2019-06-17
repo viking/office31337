@@ -60,12 +60,12 @@ class Message(EmailMessage):
         if len(inline_attachments) > 0:
             if item.text_body is not None:
                 self.add_related(item.text_body, subtype = 'plain')
-            if item.body.body_type == 'HTML':
+            if item.body is not None and item.body.body_type == 'HTML':
                 self.add_related(str(item.body), subtype = 'html')
         else:
             if item.text_body is not None:
                 self.set_content(item.text_body, subtype = 'plain')
-            if item.body.body_type == 'HTML':
+            if item.body is not None and item.body.body_type == 'HTML':
                 self.add_alternative(str(item.body), subtype = 'html')
 
         # add any inline attachments first
