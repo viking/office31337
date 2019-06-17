@@ -87,12 +87,18 @@ class Message(EmailMessage):
         for attachment in attachments:
             if isinstance(attachment, FileAttachment):
                 maintype, subtype = attachment.content_type.split('/')
+                headers = []
                 with attachment.fp as fp:
                     data = fp.read()
                     if inline:
+                        if attachment.name is not None:
+                            headers.append(f"Content-Disposition: inline; filename=\"{attachment.name}\"")
                         self.add_related(data, maintype = maintype, subtype = subtype,
-                                         cid = attachment.content_id)
+                                         cid = attachment.content_id, headers = headers)
                     else:
-                        self.add_attachment(data, maintype = maintype, subtype = subtype)
+                        if attachment.name is not None:
+                            headers.append(f"Content-Disposition: attachment; filename=\"{attachment.name}\"")
+                        self.add_attachment(data, maintype = maintype, subtype = subtype,
+                                            headers = headers)
             elif isinstance(attachment, ItemAttachment):
                 print(attachment)
